@@ -34,7 +34,7 @@ e2 = cv2.getTickCount()
 time = (e2 - e1)/ cv2.getTickFrequency()
 print("init",time)
 
-image = cv2.imread('test2.png',0)
+image = cv2.imread('test.png',0)
 image = cv2.resize(image, (600, 800)) 
 
 #plt.figure()
