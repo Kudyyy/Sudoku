@@ -5,22 +5,18 @@ import sys
 from copy import deepcopy
 from matplotlib import pyplot as plt
 from model import Model
+from multiprocessing import Process, Lock
 
 
 class SudokuSolver:
 
     def __init__(self):
         self.N = 9
+        self.lock = Lock()
 
     def load_model(self, path):
         self.model = Model()
         self.model.load(path)
-
-
-    def load_mask(self, path):
-        self.mask = cv2.imread(path,0)
-        ret, self.mask = cv2.threshold(self.mask, 10, 255, cv2.THRESH_BINARY)
-        #self.mask = cv2.bitwise_not(self.mask)
 
 
     def __sortV(self, vert):
@@ -33,23 +29,24 @@ class SudokuSolver:
             swaper = vert[2]
             vert[2] = vert[3]
             vert[3] = swaper
-        return vert
+        return np.asarray(vert, dtype=np.int0)
 
 
     def find_sudoku_contour(self, image):
-        blurred = cv2.GaussianBlur(image, (17, 17), 0)
-        bin_image = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-         cv2.THRESH_BINARY_INV, 15, 7)
-        with_mask = cv2.subtract(bin_image, self.mask)
-        kernel = np.ones((3,3),np.uint8)
-        noises_red = cv2.morphologyEx(with_mask, cv2.MORPH_OPEN, kernel)
-        kernel = np.ones((10,10),np.uint8)
-        dilation = cv2.dilate(noises_red,kernel)
-        ind, contours, hierarchy = cv2.findContours(dilation,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        c_max = max(contours, key=cv2.contourArea)
-        rect = cv2.minAreaRect(c_max)
-        box = cv2.boxPoints(rect)
-        return np.int0(box)
+        edges = cv2.Canny(image,50,200)
+        ind, contours, hierarchy = cv2.findContours(edges,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)
+        print("Found {} contours".format(len(contours)))
+
+        for contour in contours:
+            x,y,w,h = cv2.boundingRect(contour)
+            if float(w)/h > 0.8 and float(w)/h < 1.2 and w*h > 20000:
+                rect = cv2.minAreaRect(contour)
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                box = self.__sortV(box)
+                return np.int0(box)
+        return None
 
 
     def get_sudoku_as_list(self, image, box=None):
@@ -57,26 +54,31 @@ class SudokuSolver:
         def onMatrix(x, y, w, h):
             center = ((2*x+w)/2,(2*y+h)/2)
             cord = tuple((map(lambda x : int(x/30.5 + 0.4) - 1, center)))
-            return tuple((map(lambda x : 0 if x < 0 else x , cord)))
+            cord = tuple((map(lambda x : 0 if x < 0 else x , cord)))
+            return tuple((map(lambda x : 8 if x > 8 else x , cord)))
+
 
         if box is None:
             box = self.find_sudoku_contour(image)
+            if box is None:
+                return None
             
         res_size = np.float32([[0,0],[300,0],[300,300],[0,300]])
-        box = self.__sortV(box)
         M = cv2.getPerspectiveTransform(np.float32(box),res_size)
         sudoku = cv2.warpPerspective(image,M,(300,300))
+
         bin_image = cv2.adaptiveThreshold(sudoku, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
          cv2.THRESH_BINARY_INV, 21, 7)
-        kernel = np.ones((2,2),np.uint8)
-        noises_red = cv2.morphologyEx(bin_image, cv2.MORPH_OPEN, kernel)
-        grid_mask = self.__draw_grid_mask(noises_red)
-        without_grid = cv2.subtract(noises_red, grid_mask) 
+
+        grid_mask = self.__draw_grid_mask(bin_image)
+        without_grid = cv2.subtract(bin_image, grid_mask) 
             
         sudoku_matrix = [[ 0 for x in range(0,9)] for x in range(0,9)]
 
         ind, contours, hierarchy = cv2.findContours(without_grid,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
         contours = sorted(contours, key=cv2.contourArea)
+        t_sum = 0
+
         for contour in contours:
             x,y,w,h = cv2.boundingRect(contour)
             if float(w)/h > 0.3 and float(w)/h < 1.2 and w*h > 50:
@@ -84,14 +86,11 @@ class SudokuSolver:
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 i, j = onMatrix(x, y, w, h)
-                symbol = noises_red[y:y+h, x:x+h]
+                symbol = bin_image[y:y+h, x:x+h]
                 symbol = cv2.resize(symbol, (30, 30)) 
-                #cord = "("+str(x)+","+str(y)+").jpg"
-                #path = "wyniki/"
                 symbol = cv2.bitwise_not(symbol)
-                #cv2.imwrite(path+cord,symbol)
-                result = self.model.predict(symbol)
                 sudoku_matrix[j][i] = self.model.predict(symbol)
+
         return sudoku_matrix
 
 
@@ -113,7 +112,7 @@ class SudokuSolver:
         ind, contours, hierarchy = cv2.findContours(horiz,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
         for contour in contours:
             x,y,w,h = cv2.boundingRect(contour)
-            if float(w)/h > 5:
+            if float(w)/h > 10:
                 rect = cv2.minAreaRect(contour)
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
