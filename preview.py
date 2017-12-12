@@ -61,8 +61,6 @@ def draw_rec( contour):
 
     return a 
     
-    
-
 stream = io.BytesIO()
 solver = SudokuSolver()
 solver.load_model("./model.h5")
@@ -78,23 +76,40 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     image = frame.array
     rawCapture.truncate(0)
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-    
-    contour = solver.find_sudoku_contour(gray)
-    print("Contour = {}".format(contour))
+    e1 = cv2.getTickCount()
+    contour, sudoku = solver.find_sudoku_contour(gray)
+    e2 = cv2.getTickCount()
+    time = (e2 - e1)/ cv2.getTickFrequency()
+    print("Find sudoku contour: ", time)
+    if contour is None:
+        continue
 
-    sudoku = solver.get_sudoku_as_list(gray)
-    print("Got sudoku = {}".format(sudoku))
-    
     if drawn:
         drawn = False
         camera.remove_overlay(o)
-        
-    if sudoku is None:
+    try:
+        a = draw_rec(contour)
+    except:
         continue
-    a = draw_rec(contour)
+
     o = camera.add_overlay(a.tobytes(), layer=3, alpha=64)
     drawn = True
+        
+    e1 = cv2.getTickCount()
+    sudoku = solver.get_sudoku_as_list(sudoku)
+    e2 = cv2.getTickCount()
+    time = (e2 - e1)/ cv2.getTickFrequency()
+    print("Get sudoku as list: ", time)
+    print_field(sudoku)
+    e1 = cv2.getTickCount()
+    
+    if sudoku is None:
+        continue
+
     sudoku = solver.solve_sudoku(sudoku)
-    print_field(sudoku)          
+    e2 = cv2.getTickCount()
+    time = (e2 - e1)/ cv2.getTickFrequency()
+    print_field(sudoku)     
+    print("Rest: ", time)   
 
 

@@ -6,6 +6,10 @@ from copy import deepcopy
 from matplotlib import pyplot as plt
 from model import Model
 from multiprocessing import Process, Lock
+from pylab import *
+import homography
+from PIL import Image
+from scipy import ndimage
 
 
 class SudokuSolver:
@@ -13,43 +17,96 @@ class SudokuSolver:
     def __init__(self):
         self.N = 9
         self.lock = Lock()
+        self.H = 1
+        self.K = 3
 
     def load_model(self, path):
         self.model = Model()
         self.model.load(path)
 
-
-    def __sortV(self, vert):
-        vert = sorted(vert, key=lambda v : v[1])
-        if vert[0][0] > vert[1][0]:
-            swaper = vert[0]
-            vert[0] = vert[1]
-            vert[1] = swaper
-        if vert[3][0] > vert[2][0]:
-            swaper = vert[2]
-            vert[2] = vert[3]
-            vert[3] = swaper
-        return np.asarray(vert, dtype=np.int0)
+    def __perform_homography(self, x):
+        global H
+        fp = array([array([p[1],p[0],1]) for p in x]).T
+        tp = array([[0,0,1],[0,300,1],[300,300,1],[300,0,1]]).T
+        # estimate the homography
+        H = homography.H_from_points(tp,fp)
 
 
     def find_sudoku_contour(self, image):
-        edges = cv2.Canny(image,50,200)
-        ind, contours, hierarchy = cv2.findContours(edges,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)
-        print("Found {} contours".format(len(contours)))
-
-        for contour in contours:
-            x,y,w,h = cv2.boundingRect(contour)
-            if float(w)/h > 0.8 and float(w)/h < 1.2 and w*h > 20000:
-                rect = cv2.minAreaRect(contour)
-                box = cv2.boxPoints(rect)
-                box = np.int0(box)
-                box = self.__sortV(box)
-                return np.int0(box)
-        return None
+        height, width = image.shape
+        orig = cv2.resize(image, (width // self.K, height // self.K))
+        kernel_val = 11 // self.K if (11 // self.K) % 2 == 1 else (11 // self.K) + 1
+        blur = cv2.GaussianBlur(orig,(kernel_val, kernel_val),0)
+        kernel1 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernel_val, kernel_val))
 
 
-    def get_sudoku_as_list(self, image, box=None):
+        # perform a morphology based on the previously computed kernel
+        close = cv2.morphologyEx(blur,cv2.MORPH_CLOSE,kernel1)
+        div = np.float32(blur)/(close)
+        res = np.uint8(cv2.normalize(div,div,0,255,cv2.NORM_MINMAX))
+
+        # perform an adaptive threshold and find the contours
+        thresh = cv2.adaptiveThreshold(res,255,0,1,19,2)
+        ind, contours,hier = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+
+        # find the sudoku gameboard by looking for the largest square in image
+        biggest = None
+        max_area = 0
+        for i in contours:
+            area = cv2.contourArea(i)
+            if area > (10000 / (self.K ** 2)):
+                peri = cv2.arcLength(i,True)
+                approx = cv2.approxPolyDP(i,0.02*peri,True)
+                if area > max_area and len(approx)==4:
+                    biggest = approx
+                    max_area = area        
+
+        # calculate the center of the square
+        try:
+            M = cv2.moments(biggest)
+            cx = int(M['m10']/M['m00'])
+            cy = int(M['m01']/M['m00'])
+        except:
+            return None, None
+
+        # find the location of the four corners
+        for a in range(0, 4):
+            # calculate the difference between the center 
+            # of the square and the current point
+            dx = biggest[a][0][0] - cx
+            dy = biggest[a][0][1] - cy
+
+            if dx < 0 and dy < 0:
+                topleft = (biggest[a][0][0] * self.K, biggest[a][0][1] * self.K)
+            elif dx > 0 and dy < 0:
+                topright = (biggest[a][0][0] * self.K, biggest[a][0][1] * self.K)
+            elif dx > 0 and dy > 0:
+                botright = (biggest[a][0][0] * self.K, biggest[a][0][1] * self.K)
+            elif dx < 0 and dy > 0:
+                botleft = (biggest[a][0][0] * self.K, biggest[a][0][1] * self.K)
+
+        # the four corners from top left going clockwise
+        try:
+            corners = []
+            corners.append(topleft)
+            corners.append(topright)
+            corners.append(botright)
+            corners.append(botleft)
+            print(corners)
+        except:
+            return None, None
+
+        self.__perform_homography(corners)
+        res_size = np.float32([[0,0],[300,0],[300,300],[0,300]])
+        M = cv2.getPerspectiveTransform(np.float32(corners),res_size)
+        sudoku = cv2.warpPerspective(image,M,(300,300))
+        sudoku = cv2.adaptiveThreshold(sudoku,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+            cv2.THRESH_BINARY_INV,15,7)
+        return corners, sudoku
+
+
+    def get_sudoku_as_list(self, sudoku):
         
         def onMatrix(x, y, w, h):
             center = ((2*x+w)/2,(2*y+h)/2)
@@ -58,20 +115,8 @@ class SudokuSolver:
             return tuple((map(lambda x : 8 if x > 8 else x , cord)))
 
 
-        if box is None:
-            box = self.find_sudoku_contour(image)
-            if box is None:
-                return None
-            
-        res_size = np.float32([[0,0],[300,0],[300,300],[0,300]])
-        M = cv2.getPerspectiveTransform(np.float32(box),res_size)
-        sudoku = cv2.warpPerspective(image,M,(300,300))
-
-        bin_image = cv2.adaptiveThreshold(sudoku, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-         cv2.THRESH_BINARY_INV, 21, 7)
-
-        grid_mask = self.__draw_grid_mask(bin_image)
-        without_grid = cv2.subtract(bin_image, grid_mask) 
+        grid_mask = self.__draw_grid_mask(sudoku)
+        without_grid = cv2.subtract(sudoku, grid_mask) 
             
         sudoku_matrix = [[ 0 for x in range(0,9)] for x in range(0,9)]
 
@@ -86,7 +131,7 @@ class SudokuSolver:
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 i, j = onMatrix(x, y, w, h)
-                symbol = bin_image[y:y+h, x:x+h]
+                symbol = sudoku[y:y+h, x:x+h]
                 symbol = cv2.resize(symbol, (30, 30)) 
                 symbol = cv2.bitwise_not(symbol)
                 sudoku_matrix[j][i] = self.model.predict(symbol)
