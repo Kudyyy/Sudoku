@@ -29,14 +29,13 @@ def print_field(field):
 e1 = cv2.getTickCount()
 solver = SudokuSolver()
 solver.load_model("./model.h5")
-solver.load_mask("mask.jpg")
 e2 = cv2.getTickCount()
 time = (e2 - e1)/ cv2.getTickFrequency()
 print("init",time)
 
-image = cv2.imread('test.png',0)
-image = cv2.resize(image, (600, 800)) 
-
+image = cv2.imread('img0.jpg',0)
+image = cv2.resize(image, (960, 540)) 
+print(type(image))
 #plt.figure()
 #plt.imshow(image)
 

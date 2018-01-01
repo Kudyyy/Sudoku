@@ -1,11 +1,9 @@
-
 import numpy as np
 import cv2
 import sys
 from copy import deepcopy
 from matplotlib import pyplot as plt
 from model import Model
-from multiprocessing import Process, Lock
 from pylab import *
 import homography
 from PIL import Image
@@ -16,7 +14,6 @@ class SudokuSolver:
 
     def __init__(self):
         self.N = 9
-        self.lock = Lock()
         self.H = 1
         self.K = 3
 
@@ -93,7 +90,6 @@ class SudokuSolver:
             corners.append(topright)
             corners.append(botright)
             corners.append(botleft)
-            print(corners)
         except:
             return None, None
 
