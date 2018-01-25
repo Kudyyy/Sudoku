@@ -1,9 +1,11 @@
 # Sudoku
 
-Sudoku.ipynb posiada dużo nie potrzebnych rzeczy.
+Sudoku.ipynb - Shows how it works.
 
-Sudoku.py klasa prawie gotowa to użytku.
+sudoku.py - Class with implementation of those all wierd things that enable solving sudoku from images.
 
-main.py przykładowe użycie Sudoku.py.
+preview.py - Real time solving sudoku on Raspberry Pi Camera.
 
-Projekt w trakcie rozwoju.
+model.py - Predicts digits from images.
+
+mnist.ipynb - Shows how model was created.

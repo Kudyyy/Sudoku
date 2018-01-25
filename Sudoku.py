@@ -1,4 +1,3 @@
-
 import numpy as np
 import cv2
 import sys
@@ -93,7 +92,6 @@ class SudokuSolver:
             corners.append(topright)
             corners.append(botright)
             corners.append(botleft)
-            print(corners)
         except:
             return None, None
 
