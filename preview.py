@@ -8,7 +8,7 @@ import math
 
 from picamera import PiCamera
 from picamera.array import PiRGBArray
-from sudoku import SudokuSolver
+from Sudoku import SudokuSolver
 from PIL import Image
 from time import sleep
 from scipy import ndimage
@@ -77,28 +77,7 @@ def draw_rec( contour):
     draw_line(a, (contour[0][0], contour[0][1]), (contour[3][0] , contour[3][1]), thick=True)
     ## prawo
     draw_line(a, (contour[1][0], contour[1][1]), (contour[2][0] , contour[2][1]), thick=True)
-
-    #print(contour[1][0], contour[3][0])
-
-    ### RYSOWANIE GRIDU
-    # up_diff_x = (contour[0][0] - contour[3][0]) // 9
-    # up_diff_y = (contour[0][1] - contour[3][1]) // 9
-
-    # side_diff_x = (contour[0][0] - contour[1][0]) // 9
-    # side_diff_y = (contour[0][1] - contour[1][1]) // 9
-
-    # print("roznice: ", up_diff_x, up_diff_y)
-
-    # for x in range(0,10):
-    #     thick = False
-    #     if x % 3 == 0:
-    #         thick = True
-    #     draw_line(a, (contour[0][0] - x*up_diff_x, contour[0][1] - x*up_diff_y),
-    #      (contour[1][0] - x*up_diff_x, contour[1][1] - x*up_diff_y), thick=thick)
-
-    #     draw_line(a, (contour[0][0] - x*side_diff_x, contour[0][1] - x*side_diff_y),
-    #      (contour[3][0] - x*side_diff_x, contour[3][1] - x*side_diff_y), thick=thick)
-
+    
     return a 
 
 
@@ -152,8 +131,6 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     contour, sudoku = solver.find_sudoku_contour(gray)
     e2 = cv2.getTickCount()
     time = (e2 - e1)/ cv2.getTickFrequency()
-
-    # print("Find sudoku contour: ", time)
 
     if contour is None:
         continue
